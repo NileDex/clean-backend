@@ -49,7 +49,7 @@ const authenticateAdmin = (req: any, res: any, next: any) => {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
 
   app.use(cors());
   app.use(bodyParser.json({ limit: '10mb' }));
@@ -77,7 +77,7 @@ async function startServer() {
   };
 
   if (!MONGODB_URI) {
-    connectionError = "CONFIGURATION_ERROR: MONGODB_URI secret is missing. Please add it in Settings > Secrets.";
+    connectionError = "CONFIGURATION_ERROR: MONGODB_URI secret is missing. Please add it to your environment variables.";
   } else {
     // Connect to MongoDB in the background
     client.connect().then(() => {
@@ -88,12 +88,21 @@ async function startServer() {
     }).catch(err => {
       connectionError = err.message;
       if (err.message.includes("auth failed") || err.message.includes("authentication failed")) {
-        connectionError = "AUTHENTICATION_FAILED: The password in your MONGODB_URI secret is incorrect.";
+        connectionError = "AUTHENTICATION_FAILED: The password in your MONGODB_URI is incorrect.";
       }
       console.error("❌ MongoDB Connection Status: FAILED");
       console.error("Error details:", err.message);
     });
   }
+
+  // Root route for health check
+  app.get("/", (req, res) => {
+    res.json({ 
+      status: "online", 
+      database: db ? "connected" : "connecting/error",
+      message: "CleanShop Backend API is running." 
+    });
+  });
 
   // Auth Routes
   app.post("/api/login", async (req, res) => {
@@ -101,7 +110,6 @@ async function startServer() {
       if (!db) return res.status(503).json({ error: "Database connecting..." });
       const { password } = req.body;
       
-      // Find the admin user
       const admin = await db.collection("admins").findOne({ username: "admin" });
       
       if (!admin) {
@@ -349,23 +357,8 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(rootDir, 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
-
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on port ${PORT}`);
   });
 }
 
