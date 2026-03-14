@@ -49,7 +49,7 @@ const authenticateAdmin = (req: any, res: any, next: any) => {
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(cors());
   app.use(bodyParser.json({ limit: '10mb' }));
@@ -303,11 +303,18 @@ async function startServer() {
   app.post("/api/products", authenticateAdmin, async (req, res) => {
     try {
       if (!db) return res.status(503).json({ error: "Database connecting..." });
-      const { name, description, fullInfo, price, image, inStock, sellerId } = req.body;
+      const { name, description, fullInfo, price, images, image, inStock, sellerId } = req.body;
       
       let sellerInfo = null;
       if (sellerId) {
         sellerInfo = await db.collection("sellers").findOne({ _id: new ObjectId(sellerId) });
+      }
+
+      // Handle both single image (legacy) and multiple images
+      const productImages = Array.isArray(images) ? images : (image ? [image] : []);
+
+      if (productImages.length < 3) {
+        return res.status(400).json({ error: "At least 3 images are required for new products." });
       }
 
       const result = await db.collection("products").insertOne({
@@ -315,7 +322,8 @@ async function startServer() {
         description,
         fullInfo,
         price: parseFloat(price),
-        image,
+        images: productImages,
+        image: productImages[0] || null, // Keep single image for backward compatibility
         inStock: inStock === true || inStock === 'true',
         sellerId: sellerId ? new ObjectId(sellerId) : null,
         seller: sellerInfo ? {
